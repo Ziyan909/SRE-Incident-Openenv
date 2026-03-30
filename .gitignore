@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environment and secrets
+.env
+.env.*
+*.env
+*.local
+
+# Local IDE/system
+.vscode/
+.idea/
+.DS_Store
+
+# Build and runtime artifacts
+artifacts/replays/*.json
+artifacts/benchmarks/*.json
+
+# Local scratch files
+trash/

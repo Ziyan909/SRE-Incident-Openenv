@@ -1,0 +1,37 @@
+name: sre-incident-env
+description: OpenEnv-compatible SRE incident response simulator with deterministic graders.
+entrypoint: server/app.py
+protocol: openenv
+language: python
+ui: /
+endpoints:
+  - /reset
+  - /step
+  - /state/{session_id}
+  - /tasks
+  - /grader
+  - /baseline
+  - /benchmark
+  - /replay/{session_id}
+runtime:
+  reset: /reset
+  step: /step
+  state: /state/{session_id}
+actions:
+  - read_logs
+  - check_metrics
+  - ping_service
+  - inspect_deploy
+  - query_traces
+  - check_runbook
+  - diff_config
+  - drain_traffic
+  - failover_region
+  - restart_service
+  - rollback_deploy
+  - scale_up
+  - check_dependencies
+  - submit_diagnosis
+observation_model: env.models.Observation
+action_model: env.models.Action
+reward_model: env.models.Reward

@@ -1,0 +1,76 @@
+This document outlines the technical requirements, evaluation framework, and submission guidelines for **Round 1 of the OpenEnv Hackathon**, organized by Meta, Hugging Face, and Scaler School of Technology.
+
+---
+
+## 1. Project Overview
+The objective is to architect and deploy a **real-world simulation environment** compliant with the **OpenEnv specification**. This environment must serve as a training and benchmarking ground for AI agents to perform complex, non-trivial human tasks through a standardized API.
+
+### Core Mission
+> Build a complete environment that an AI agent can navigate using `step()`, `reset()`, and `state()` methods to solve practical, real-world problems.
+
+---
+
+## 2. Functional Requirements
+
+### 2.1 Task Simulation
+* **Domain:** Must simulate a genuine human task (e.g., Email Triage, Code Review, Customer Support, Content Moderation). 
+* **Constraint:** "Toy" problems or games (e.g., Chess, GridWorld) are strictly prohibited.
+
+### 2.2 OpenEnv Specification Compliance
+The environment must implement the following technical interface:
+* **API Methods:** `step(action)`, `reset()`, and `state()`.
+* **Data Modeling:** Use **Pydantic models** for typed `Observation`, `Action`, and `Reward` objects.
+* **Configuration:** Include an `openenv.yaml` file containing all necessary metadata.
+
+### 2.3 Task Tiering & Grading
+You must provide at least **three distinct tasks** with varying difficulty:
+* **Progression:** Easy $\rightarrow$ Medium $\rightarrow$ Hard.
+* **Deterministic Graders:** Each task must have a programmatic grader that outputs a score between **0.0 and 1.0**.
+* **Reward Shaping:** The reward function must provide "dense" feedback (signals over the full trajectory) rather than just a binary "pass/fail" at the end. It must also penalize undesirable behaviors (e.g., infinite loops).
+
+---
+
+## 3. Technical & Non-Functional Requirements
+
+### 3.1 Baseline Inference Script
+* **Client:** Must use the **OpenAI API client** to run a model against your environment.
+* **Reproducibility:** The script must produce a consistent baseline score for all three tasks.
+* **Security:** API credentials must be read from environment variables (`OPENAI_API_KEY`).
+
+### 3.2 Deployment & DevOps
+* **Platform:** Deploy as a containerized **Hugging Face Space** tagged with `openenv`.
+* **Containerization:** A working `Dockerfile` is mandatory; the environment must start cleanly with `docker build` and `docker run`.
+
+### 3.3 Documentation
+A comprehensive `README.md` is required, detailing:
+* Environment description and motivation.
+* Definitions of Action and Observation spaces.
+* Setup and usage instructions.
+* Baseline scores.
+
+---
+
+## 4. Evaluation Criteria
+
+| Parameter | Weight | Key Focus Area |
+| :--- | :--- | :--- |
+| **Real-world Utility** | 30% | Practicality for training/evaluating real agents. |
+| **Task & Grader Quality** | 25% | Clear objectives, fair scoring, and genuine difficulty scaling. |
+| **Environment Design** | 20% | Clean state management and sensible episode boundaries. |
+| **Code Quality** | 15% | Spec compliance, Pydantic typing, and Docker functionality. |
+| **Creativity & Novelty** | 10% | Originality of the problem domain and reward mechanics. |
+
+---
+
+## 5. Submission Checklist & Disqualification
+**Failure to meet any of the following will lead to immediate disqualification:**
+
+* **HF Space Accessibility:** Must return a `200` status code and respond to `reset()`.
+* **Spec Validation:** Must pass the `openenv validate` command.
+* **Baseline Reproducibility:** The provided inference script must run without errors.
+* **Unique Content:** Plagiarized or "trivially modified" existing environments will be rejected.
+* **Endpoint Exposure:** Must expose `/baseline`, `/grader`, and `/tasks` endpoints.
+
+---
+
+**Would you like me to help you brainstorm a specific real-world domain (like Logistics or Legal Review) and draft the Pydantic models for it?**

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SRE Incident Command</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=20260327-1">
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-copy">
+      <p class="eyebrow">SRE Incident Environment</p>
+      <h1>SRE Command Console</h1>
+      <p class="masthead-text">
+        Select a difficulty tier, pick a scenario family, inspect alerts, rollout state, and trace clues,
+        then compare your response against the seeded benchmark.
+      </p>
+    </div>
+    <div class="masthead-metrics">
+      <article class="metric-tile">
+        <span class="metric-label">Tasks</span>
+        <strong id="task-count">0</strong>
+      </article>
+      <article class="metric-tile">
+        <span class="metric-label">Session</span>
+        <strong id="session-state">Idle</strong>
+      </article>
+      <article class="metric-tile metric-status">
+        <span class="metric-label">Runtime</span>
+        <span id="status-badge" class="status-pill status-ready">● Ready</span>
+      </article>
+    </div>
+  </header>
+
+  <main class="canvas canvas-banners">
+    <section class="tier-board">
+      <div class="tier-banner tier-selector-shell">
+        <div class="tier-banner-head">
+          <div>
+            <p class="panel-kicker">Mode Select</p>
+            <h2>Choose Difficulty</h2>
+          </div>
+          <span class="tier-counter" id="active-tier-count">0 scenarios</span>
+        </div>
+        <div class="tier-toggle-row">
+          <button id="tier-button-easy" class="tier-mode-button" data-tier="easy">Easy</button>
+          <button id="tier-button-medium" class="tier-mode-button" data-tier="medium">Medium</button>
+          <button id="tier-button-hard" class="tier-mode-button" data-tier="hard">Hard</button>
+        </div>
+        <div class="tier-active-panel">
+          <div class="tier-active-head">
+            <div>
+              <p class="panel-kicker">Scenario List</p>
+              <h3 id="active-tier-title">Easy</h3>
+            </div>
+          </div>
+          <div id="active-tier-list" class="tier-scenario-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="main-stack">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="panel-kicker">Selected Scenario</p>
+            <h2 id="selected-task-name">Waiting for tasks</h2>
+          </div>
+        <div class="action-cluster">
+          <label class="field field-inline">
+            <span>Seed</span>
+            <input id="session-seed" type="number" min="0" value="0">
+          </label>
+          <button id="refresh-tasks" class="btn btn-muted">Refresh</button>
+          <button id="run-baseline" class="btn btn-muted">Run Baseline</button>
+          <button id="start-session" class="btn btn-solid">Start Session</button>
+        </div>
+        </div>
+        <p id="scenario-description" class="hero-description">Choose a scenario from the selected tier to begin.</p>
+        <p id="mode-guidance" class="hero-description">
+          Investigation now matters: versions and dependencies start hidden, metrics must be inspected directly,
+          and hard mode requires an explicit recovery ping before final diagnosis.
+        </p>
+        <div class="info-strip">
+          <article class="info-card">
+            <span>Tier</span>
+            <strong id="selected-tier">-</strong>
+          </article>
+          <article class="info-card">
+            <span>Max Steps</span>
+            <strong id="selected-max-steps">-</strong>
+          </article>
+          <article class="info-card info-card-wide">
+            <span>Task ID</span>
+            <strong id="selected-task-id">-</strong>
+          </article>
+        </div>
+        <div id="service-focus" class="chip-row"></div>
+        <div id="action-space" class="chip-row chip-row-secondary"></div>
+      </section>
+
+      <section class="content-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Live State</p>
+              <h2>Service Topology</h2>
+            </div>
+            <button id="refresh-state" class="btn btn-muted">Sync</button>
+          </div>
+          <div id="alerts" class="alert-list is-empty">Start a session to see active alerts.</div>
+          <div id="incident-ticket" class="alert-list is-empty">Incident ticket and operator notes appear here.</div>
+          <div id="lifecycle-stage" class="alert-list is-empty">Lifecycle stage appears here.</div>
+          <div id="business-impact" class="alert-list is-empty">Business impact appears here.</div>
+          <div id="traffic-status" class="alert-list is-empty">Traffic control status appears here.</div>
+          <div id="queue-status" class="alert-list is-empty">Queue depth appears here.</div>
+          <div id="feature-flags" class="alert-list is-empty">Feature flag state appears here.</div>
+          <div id="regional-status" class="alert-list is-empty">Regional status appears here.</div>
+          <div id="telemetry-warnings" class="alert-list is-empty">Telemetry warnings appear here.</div>
+          <div id="service-owners" class="alert-list is-empty">Service ownership contacts appear here.</div>
+          <div id="runbook-hints" class="alert-list is-empty">Relevant runbook hints appear here.</div>
+          <div id="deploy-history" class="alert-list is-empty">Deploy and change history appears here.</div>
+          <div id="config-findings" class="alert-list is-empty">Config findings appear here.</div>
+          <div id="validation-status" class="alert-list is-empty">Validation status appears here after investigation or remediation.</div>
+          <div id="change-events" class="alert-list is-empty">Recent change and deployment events appear here.</div>
+          <div id="rollout-status" class="alert-list is-empty">Rollout and canary state appears here.</div>
+          <div id="trace-output" class="alert-list is-empty">Trace clues appear here after investigation.</div>
+          <div id="services-grid" class="svc-grid is-empty">No services loaded.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Operator Controls</p>
+              <h2>Action Composer</h2>
+            </div>
+            <div class="action-cluster">
+              <button id="queue-action" class="btn btn-muted">Queue</button>
+              <button id="run-single" class="btn btn-solid">Send Step</button>
+            </div>
+          </div>
+
+          <div class="composer-grid">
+            <label class="field">
+              <span>Action Type</span>
+              <select id="action-type"></select>
+            </label>
+            <label class="field">
+              <span>Service</span>
+              <input id="service" placeholder="auth-service">
+            </label>
+            <label class="field">
+              <span>Lines</span>
+              <input id="lines" type="number" value="50">
+            </label>
+            <label class="field">
+              <span>Window (sec)</span>
+              <input id="window-seconds" type="number" value="300">
+            </label>
+            <label class="field">
+              <span>Target Version</span>
+              <input id="target-version" placeholder="v5.4.1">
+            </label>
+            <label class="field">
+              <span>Replicas</span>
+              <input id="replicas" type="number" value="2">
+            </label>
+            <label class="field">
+              <span>Root Cause Service</span>
+              <input id="root-cause-service" placeholder="db-postgres">
+            </label>
+            <label class="field">
+              <span>Failure Type</span>
+              <select id="root-cause-category">
+                <option value="">None</option>
+                <option value="bad_deploy">bad_deploy</option>
+                <option value="oom_crash">oom_crash</option>
+                <option value="dependency_fail">dependency_fail</option>
+                <option value="db_deadlock">db_deadlock</option>
+                <option value="memory_leak">memory_leak</option>
+                <option value="config_error">config_error</option>
+              </select>
+            </label>
+          </div>
+
+          <p class="hero-description">
+            Suggested flow: inspect metrics or logs, discover dependencies, apply a fix only after evidence, then validate recovery before submitting diagnosis.
+          </p>
+
+          <label class="field textarea-field">
+            <span>Fix Description</span>
+            <textarea id="fix-description" rows="3" placeholder="Describe the diagnosis and fix applied..."></textarea>
+          </label>
+
+          <div class="queue-wrap">
+            <div class="queue-header">
+              <div>
+                <p class="panel-kicker">Queue</p>
+                <h3>Queued Actions</h3>
+              </div>
+              <div class="action-cluster">
+                <button id="clear-actions" class="btn btn-muted">Clear</button>
+                <button id="run-queued" class="btn btn-solid">Run All</button>
+              </div>
+            </div>
+            <div id="queued-actions" class="q-list is-empty">No actions queued.</div>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <aside class="panel panel-telemetry">
+      <div class="panel-header">
+        <div>
+          <p class="panel-kicker">Telemetry</p>
+          <h2>Run Analysis</h2>
+        </div>
+      </div>
+
+      <section class="telemetry-block">
+        <div class="telemetry-head">Baseline Result</div>
+        <label class="field field-inline">
+          <span>Provider</span>
+          <select id="baseline-provider">
+            <option value="scripted">scripted</option>
+            <option value="openai">openai</option>
+            <option value="openrouter">openrouter</option>
+          </select>
+        </label>
+        <label class="field field-inline">
+          <span>Model</span>
+          <input id="baseline-model" placeholder="optional">
+        </label>
+        <div id="baseline-output" class="is-empty">Run baseline to see results.</div>
+        <label class="field field-inline">
+          <span>Benchmark Seeds</span>
+          <input id="benchmark-seeds" type="number" min="1" max="5" value="1">
+        </label>
+        <label class="field field-inline">
+          <span>Benchmark Provider</span>
+          <select id="benchmark-provider">
+            <option value="scripted">scripted</option>
+            <option value="openai">openai</option>
+            <option value="openrouter">openrouter</option>
+          </select>
+        </label>
+        <label class="field field-inline">
+          <span>Benchmark Model</span>
+          <input id="benchmark-model" placeholder="optional">
+        </label>
+        <button id="run-benchmark" class="btn btn-muted">Run Full Benchmark</button>
+        <div id="benchmark-output" class="is-empty">Run benchmark to compare all scenarios.</div>
+      </section>
+
+      <section class="telemetry-block">
+        <div class="telemetry-head">Replay Export</div>
+        <div class="action-cluster">
+          <button id="export-replay" class="btn btn-muted">Load Replay</button>
+          <button id="load-sessions" class="btn btn-muted">Browse Sessions</button>
+        </div>
+        <div id="replay-output" class="is-empty">Replay export appears here for the active session.</div>
+        <div id="judge-output" class="is-empty">Replay grading notes appear here.</div>
+        <div id="replay-steps" class="obs-timeline is-empty">Replay steps appear here.</div>
+        <div id="session-history" class="is-empty">Saved sessions appear here.</div>
+      </section>
+
+      <section class="telemetry-block">
+        <div class="telemetry-head">Replay Comparison</div>
+        <div class="action-cluster">
+          <button id="load-comparison" class="btn btn-muted">Compare Session</button>
+          <button id="load-benchmark-history" class="btn btn-muted">Benchmark History</button>
+        </div>
+        <div id="comparison-output" class="is-empty">Compare the current session against scripted and model baselines.</div>
+        <div id="benchmark-history-output" class="is-empty">Saved benchmark runs appear here.</div>
+      </section>
+
+      <section class="telemetry-block">
+        <div class="telemetry-head">Session Summary</div>
+        <div id="grader-output" class="is-empty">No session activity yet.</div>
+      </section>
+
+      <section class="telemetry-block">
+        <div class="telemetry-head">Evidence Ledger</div>
+        <div id="evidence-output" class="is-empty">Inspections and discovered evidence will appear here.</div>
+      </section>
+
+      <section class="telemetry-block">
+        <div class="telemetry-head">Unknowns</div>
+        <div id="unknowns-output" class="is-empty">Hidden versions, dependencies, and unexplored services will appear here.</div>
+      </section>
+
+      <section class="telemetry-block telemetry-block-grow">
+        <div class="telemetry-head">Observation Timeline</div>
+        <div id="timeline" class="obs-timeline is-empty">No observations yet.</div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/static/app.js?v=20260327-2" defer></script>
+</body>
+</html>
