@@ -8,271 +8,157 @@ app_port: 8000
 pinned: false
 license: mit
 tags:
-	- openenv
+  - openenv
 ---
 
 # SRE Incident Environment
 
-An OpenEnv-compatible benchmark where an agent plays on-call SRE, diagnoses realistic production incidents, and is graded on both correctness and operational quality.
+OpenEnv-compatible simulation environment for SRE incident response. This project is designed for training and evaluating agents on realistic, multi-step operational workflows: triage, investigation, mitigation, validation, and diagnosis.
 
-## Why This Is Competitive
+## Overview
 
-This project targets a real high-value workflow: production incident response.
+This environment models production-style service incidents with partial observability, dependency cascades, and deterministic grading.
 
-Most benchmarks reward single-shot answers. This one rewards investigation quality under uncertainty:
+Core characteristics:
 
-- partial observability hides key facts until the right checks are run,
-- incidents drift when root causes are not fixed,
-- hard mode includes concurrent faults and misleading signals,
-- recovery must be explicitly validated before a solution is accepted.
+- Real-world domain: on-call SRE operations
+- Structured interface: `reset`, `step`, `state`
+- Typed contracts: Pydantic `Observation`, `Action`, `Reward`
+- Deterministic evaluation: score in `[0.0, 1.0]` with dense reward signals
+- Benchmarking support: scripted and provider-driven baselines
 
-The result is closer to real ops decision-making than toy puzzle environments.
+## Key Capabilities
 
-## Table of Contents
+- Multi-tier difficulty: Easy, Medium, Hard
+- Service dependency modeling and hidden evidence
+- Rich operational actions (logs, metrics, traces, rollback, scale, failover)
+- Replay persistence and benchmark history
+- API-first architecture with browser UI
 
-- [Prerequisites](#prerequisites)
-- [Quickstart](#quickstart)
-- [Configuration](#configuration)
-- [API Contract](#api-contract)
-- [Repository Layout](#repository-layout)
-- [Validation and Quality Gates](#validation-and-quality-gates)
-- [Docker](#docker)
-- [Publishing and Deployment](#publishing-and-deployment)
-- [Troubleshooting](#troubleshooting)
-- [Limitations](#limitations)
+## System Architecture
 
-## Judge TL;DR
+High-level components:
 
-- Domain: On-call SRE diagnosis and remediation.
-- Interface: Browser UI plus JSON API.
-- Quality controls: Deterministic graders, seeded variants, hidden holdouts, replay export.
-- Evaluation depth: Dense rewards plus analytics (mitigation speed, evidence quality, blast-radius control, recovery certainty, action efficiency).
-- Reproducibility: Stable scenario templates, explicit seeds, persisted run artifacts.
+- `env/`: simulator core, incidents, baseline runner, domain models
+- `api/`: FastAPI endpoints for reset/step/state/grader/baseline/benchmark
+- `graders/`: deterministic tier graders
+- `frontend/`: browser UI
+- `tests/`: API and environment behavior tests
+- `scripts/`: submission and regression checks
 
-## Environment Design
+## Domain Model
 
-### Services
+### Service Set
 
-- api-gateway
-- auth-service
-- user-service
-- payment-service
-- db-postgres
-- cache-redis
-
-Each service can be healthy, degraded, or down. Hidden dependencies create realistic cascades.
-
-### Difficulty Tiers
-
-- Easy: Single-service incidents with one clear root cause.
-- Medium: Dependency cascades, rollout mistakes, deadlock-style failures.
-- Hard: Primary root cause plus secondary concurrent fault and noisy red herrings.
-
-### Scenario Families
-
-- OOM crash loops
-- bad deploy and config regressions
-- dependency cascades
-- cache and auth memory-pressure incidents
-- database deadlocks
-- gateway canary and edge-policy failures
+- `api-gateway`
+- `auth-service`
+- `user-service`
+- `payment-service`
+- `db-postgres`
+- `cache-redis`
 
 ### Action Space
 
-- read_logs(service, lines)
-- check_metrics(service, window_seconds)
-- ping_service(service)
-- inspect_deploy(service)
-- query_traces(service)
-- check_runbook(service)
-- diff_config(service)
-- drain_traffic(service)
-- failover_region(service)
-- restart_service(service)
-- rollback_deploy(service, target_version)
-- scale_up(service, replicas)
-- check_dependencies(service)
-- submit_diagnosis(root_cause_service, root_cause_category, fix_description)
+- `read_logs(service, lines)`
+- `check_metrics(service, window_seconds)`
+- `ping_service(service)`
+- `inspect_deploy(service)`
+- `query_traces(service)`
+- `check_runbook(service)`
+- `diff_config(service)`
+- `drain_traffic(service)`
+- `failover_region(service)`
+- `restart_service(service)`
+- `rollback_deploy(service, target_version)`
+- `scale_up(service, replicas)`
+- `check_dependencies(service)`
+- `submit_diagnosis(root_cause_service, root_cause_category, fix_description)`
 
-## What Makes The Benchmark Hard
+### Tiering
 
-- Versions begin unknown until inspection.
-- Dependency graphs are hidden until explicitly checked.
-- Metrics are present but not fully trustworthy until targeted investigation.
-- Trace/rollout signals provide clues but can mislead.
-- Hard mode requires explicit recovery ping before final diagnosis counts.
-- Unresolved incidents can degrade additional services over time.
+- Easy: single-root incidents
+- Medium: cascades and higher ambiguity
+- Hard: concurrent faults and red herrings
 
-## Current Baseline Snapshot
+## Getting Started
 
-Scripted baseline results from this repository:
-
-- Canonical /baseline tier runs: Easy 0.95, Medium 0.95, Hard 0.35
-- Full benchmark (15 templates, seeds_per_scenario=2): overall average 0.84, overall solve rate 83%
-- Tier averages in that benchmark run: Easy 0.91, Medium 0.93, Hard 0.68
-
-Interpretation:
-
-- Easy/Medium are strong and stable.
-- Hard remains intentionally challenging and prevents trivial overfitting.
-
-## Prerequisites
+### Prerequisites
 
 - Python 3.12+
 - `pip`
-- Optional: Docker 24+ for containerized runs
 
-## Quickstart
-
-### Local API server (2-3 minutes)
+### Local Setup
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+```
+
+### Run API Server
+
+```bash
 python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
 ```
 
-Open http://127.0.0.1:8000
+Then open `http://127.0.0.1:8000`.
 
-### Run baseline CLI
+### Run Baseline CLI
 
 ```bash
 .venv/bin/python baseline.py
 ```
 
-## API Contract
-
-- POST /reset: start a session and return initial observation
-- POST /step: apply one action
-- GET /state/{session_id}: fetch current observation + result summary
-- GET /tasks: list task catalog
-- GET /sessions: list persisted replay sessions
-- POST /grader: replay action sequence against fresh environment
-- GET /baseline: run scripted or model-driven baseline
-- GET /benchmark: run full public + holdout benchmark
-- GET /benchmark/history: list persisted benchmark reports
-- GET /benchmark/history/{benchmark_id}: read one report
-- GET /replay/{session_id}: export full replay trace
-- GET /compare/{session_id}: compare human session vs baselines
-
-## Repository Layout
-
-- env/: simulator, models, scenarios, benchmark runner
-- graders/: deterministic tier graders
-- api/: FastAPI app and endpoints
-- frontend/: browser incident console
-- tests/: API and environment regression tests
-- scripts/: submission and benchmark regression checks
-- artifacts/: persisted replay and benchmark outputs
-- baseline.py: deterministic and provider-backed baseline client
-- openenv.yaml: OpenEnv metadata for discovery/validation
-
-## Validation and Quality Gates
-
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python scripts/submission_check.py
-.venv/bin/python scripts/benchmark_regression_check.py
-```
-
 ## Configuration
 
-### Baseline provider setup
+When no provider key is configured, baseline CLI prompts for:
 
-When you run the baseline CLI and no API key is configured, it will prompt you to choose OpenAI, Gemini, Add Another Provider, or Later.
+- OpenAI
+- Gemini
+- Add another provider (custom OpenAI-compatible)
+- Later (scripted mode)
 
-- Choosing OpenAI or Gemini will ask for both API key and model name.
-- Choosing Add Another Provider lets you register a custom provider name with API key and model name (plus optional base URL), then it appears in provider selection.
-- Choosing Later will continue with the scripted baseline.
-- No default model is applied for OpenAI or Gemini; you must set one.
+No default model is injected for OpenAI or Gemini. A model must be provided.
 
-### Environment variables
+### Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `BASELINE_PROVIDER` | No | Provider override (`scripted`, `openai`, `gemini`, or custom provider name). |
 | `BASELINE_MODEL` | No | Global model override for current run. |
-| `OPENAI_API_KEY` | OpenAI only | API key for OpenAI baseline provider. |
-| `OPENAI_BASELINE_MODEL` | OpenAI only | Model name for OpenAI provider (required when using OpenAI). |
-| `GEMINI_API_KEY` | Gemini only | API key for Gemini baseline provider. |
-| `GEMINI_BASELINE_MODEL` | Gemini only | Model name for Gemini provider (required when using Gemini). |
-| `GEMINI_BASE_URL` | No | Optional base URL override for Gemini OpenAI-compatible endpoint. |
-| `<CUSTOM>_API_KEY` | Custom provider | API key for custom provider added via CLI. |
+| `OPENAI_API_KEY` | OpenAI only | API key for OpenAI baseline. |
+| `OPENAI_BASELINE_MODEL` | OpenAI only | Model name for OpenAI baseline. |
+| `GEMINI_API_KEY` | Gemini only | API key for Gemini baseline. |
+| `GEMINI_BASELINE_MODEL` | Gemini only | Model name for Gemini baseline. |
+| `GEMINI_BASE_URL` | No | Optional Gemini OpenAI-compatible base URL override. |
+| `<CUSTOM>_API_KEY` | Custom provider | API key for custom provider. |
 | `<CUSTOM>_BASELINE_MODEL` | Custom provider | Model name for custom provider. |
-| `<CUSTOM>_BASE_URL` | No | Optional OpenAI-compatible base URL for custom provider. |
+| `<CUSTOM>_BASE_URL` | No | Optional base URL for custom provider. |
+| `SESSION_TTL_SECONDS` | No | Session expiration window for API state. |
+| `MAX_ACTIVE_SESSIONS` | No | Upper bound for in-memory active sessions. |
 
-OpenAI:
+## API Surface
 
-```bash
-export OPENAI_API_KEY=your_key_here
-export OPENAI_USE_REAL_BASELINE=1
-export OPENAI_BASELINE_MODEL=gpt-4o-mini
-.venv/bin/python baseline.py
-```
+Primary endpoints:
 
-Gemini:
+- `POST /reset`
+- `POST /step`
+- `GET /state/{session_id}`
+- `GET /tasks`
+- `POST /grader`
+- `GET /baseline`
+- `GET /benchmark`
+- `GET /benchmark/history`
+- `GET /benchmark/history/{benchmark_id}`
+- `GET /replay/{session_id}`
+- `GET /sessions`
+- `GET /compare/{session_id}`
 
-```bash
-export GEMINI_API_KEY=your_key_here
-export GEMINI_USE_REAL_BASELINE=1
-export GEMINI_BASELINE_MODEL=gemini-2.0-flash
-.venv/bin/python baseline.py
-```
+OpenEnv metadata is defined in `openenv.yaml`.
 
-## Docker
+## Quality Gates
 
-```bash
-docker build -t sre-incident-env .
-docker run --rm -p 8000:8000 sre-incident-env
-```
-
-Quick smoke check:
-
-```bash
-curl http://127.0.0.1:8000/tasks
-curl -X POST http://127.0.0.1:8000/reset -H 'content-type: application/json' -d '{"tier":"easy","seed":0}'
-```
-
-## Publishing and Deployment
-
-### Publish to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: SRE Incident Environment"
-git branch -M main
-git remote add origin https://github.com/<your-username>/<your-repo>.git
-git push -u origin main
-```
-
-Checklist before push:
-
-- Keep secrets out of source control. Use `.env` locally and repository/Space secrets in platform settings.
-- `.gitignore` excludes local envs and generated artifacts.
-- CI is already configured in `.github/workflows/ci.yml`.
-
-### Deploy to Hugging Face Spaces (Docker)
-
-1. Create a new Hugging Face Space and choose `Docker` SDK.
-2. Push this repository to the Space repo.
-3. In Space settings, add secrets as needed:
-	- `OPENAI_API_KEY`
-	- `GEMINI_API_KEY`
-4. Optional variables:
-	- `BASELINE_PROVIDER` (`scripted`, `openai`, `gemini`)
-	- `BASELINE_MODEL`
-	- `SESSION_TTL_SECONDS`
-	- `MAX_ACTIVE_SESSIONS`
-5. Confirm build logs show container listening on port `8000`.
-
-Recommended Space hardware for reliable benchmark runs:
-
-- CPU Basic for demos and scripted baseline.
-- CPU Upgrade if running repeated provider baselines or benchmarks.
-
-### Local preflight before publishing
+Run before release:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
@@ -280,27 +166,18 @@ Recommended Space hardware for reliable benchmark runs:
 .venv/bin/python scripts/benchmark_regression_check.py
 ```
 
-### Submission fit
+## Security Notes
 
-- Real-world utility: incident response workflow, not synthetic arithmetic/planning.
-- Strong environment quality: deterministic grading, replayability, hidden holdouts, seeded perturbations.
-- Strong evaluation quality: rewards and analytics capture investigation behavior, not just final answer.
-- Product completeness: browser UI, API endpoints, baseline runner, tests, and containerized runtime.
+- Do not commit API keys or `.env` files.
+- Use environment variables for provider credentials.
+- Generated artifacts and local scratch files are excluded via `.gitignore`.
 
 ## Limitations
 
-- Simulation benchmark, not production control plane.
-- Scripted baselines can still bias agent strategy.
-- Provider baseline quality depends on model output discipline and API quotas.
+- This is a simulation benchmark, not a production control plane.
+- Baseline quality depends on provider/model behavior and API quotas.
+- Scripted baseline can bias strategy if used as a training target.
 
-## Troubleshooting
+## License
 
-- `bash: syntax error near unexpected token '('`
-Cause: a numbered menu line like `2. openai (default)` was typed directly into shell.
-Fix: run the CLI command first (`.venv/bin/python baseline.py`), then enter menu choices only when prompted by the program.
-
-- CLI waits for input in CI/non-interactive runs
-Fix: run with scripted baseline or set provider/model env vars ahead of time.
-
-- Provider authentication/model errors
-Fix: verify API key and model name; baseline returns these errors in JSON under `result.error` without crashing.
+MIT (see `LICENSE`).
