@@ -37,7 +37,6 @@ The result is closer to real ops decision-making than toy puzzle environments.
 - [Repository Layout](#repository-layout)
 - [Validation and Quality Gates](#validation-and-quality-gates)
 - [Docker](#docker)
-- [Publishing and Deployment](#publishing-and-deployment)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
 
@@ -233,59 +232,6 @@ Quick smoke check:
 curl http://127.0.0.1:8000/tasks
 curl -X POST http://127.0.0.1:8000/reset -H 'content-type: application/json' -d '{"tier":"easy","seed":0}'
 ```
-
-## Publishing and Deployment
-
-### Publish to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: SRE Incident Environment"
-git branch -M main
-git remote add origin https://github.com/<your-username>/<your-repo>.git
-git push -u origin main
-```
-
-Checklist before push:
-
-- Keep secrets out of source control. Use `.env` locally and repository/Space secrets in platform settings.
-- `.gitignore` excludes local envs and generated artifacts.
-- CI is already configured in `.github/workflows/ci.yml`.
-
-### Deploy to Hugging Face Spaces (Docker)
-
-1. Create a new Hugging Face Space and choose `Docker` SDK.
-2. Push this repository to the Space repo.
-3. In Space settings, add secrets as needed:
-	- `OPENAI_API_KEY`
-	- `GEMINI_API_KEY`
-4. Optional variables:
-	- `BASELINE_PROVIDER` (`scripted`, `openai`, `gemini`)
-	- `BASELINE_MODEL`
-	- `SESSION_TTL_SECONDS`
-	- `MAX_ACTIVE_SESSIONS`
-5. Confirm build logs show container listening on port `8000`.
-
-Recommended Space hardware for reliable benchmark runs:
-
-- CPU Basic for demos and scripted baseline.
-- CPU Upgrade if running repeated provider baselines or benchmarks.
-
-### Local preflight before publishing
-
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python scripts/submission_check.py
-.venv/bin/python scripts/benchmark_regression_check.py
-```
-
-### Submission fit
-
-- Real-world utility: incident response workflow, not synthetic arithmetic/planning.
-- Strong environment quality: deterministic grading, replayability, hidden holdouts, seeded perturbations.
-- Strong evaluation quality: rewards and analytics capture investigation behavior, not just final answer.
-- Product completeness: browser UI, API endpoints, baseline runner, tests, and containerized runtime.
 
 ## Limitations
 
