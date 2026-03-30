@@ -5,6 +5,12 @@ protocol: openenv
 language: python
 ui: /
 endpoints:
+  - /openenv/tasks
+  - /openenv/reset
+  - /openenv/step
+  - /openenv/state/{session_id}
+  - /openenv/grader
+  - /openenv/baseline
   - /reset
   - /step
   - /state/{session_id}
@@ -14,9 +20,9 @@ endpoints:
   - /benchmark
   - /replay/{session_id}
 runtime:
-  reset: /reset
-  step: /step
-  state: /state/{session_id}
+  reset: /openenv/reset
+  step: /openenv/step
+  state: /openenv/state/{session_id}
 actions:
   - read_logs
   - check_metrics

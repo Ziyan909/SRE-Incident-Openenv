@@ -67,11 +67,13 @@ def frontend():
 
 
 @app.get("/tasks")
+@app.get("/openenv/tasks")
 def get_tasks():
     return [task.model_dump(mode="json") for task in list_tasks()]
 
 
 @app.post("/reset")
+@app.post("/openenv/reset")
 def reset_environment(request: ResetRequest):
     _cleanup_sessions()
     env = SREIncidentEnv(tier=request.tier, task_id=request.task_id, seed=request.seed)
@@ -92,6 +94,7 @@ def reset_environment(request: ResetRequest):
 
 
 @app.post("/step")
+@app.post("/openenv/step")
 def step_environment(request: StepRequest):
     _cleanup_sessions()
     session = SESSIONS.get(request.session_id)
@@ -117,6 +120,7 @@ def step_environment(request: StepRequest):
 
 
 @app.get("/state/{session_id}")
+@app.get("/openenv/state/{session_id}")
 def state_environment(session_id: str):
     _cleanup_sessions()
     session = SESSIONS.get(session_id)
@@ -131,6 +135,7 @@ def state_environment(session_id: str):
 
 
 @app.post("/grader")
+@app.post("/openenv/grader")
 def run_grader(request: GraderRequest):
     env = SREIncidentEnv(tier=request.tier, task_id=request.task_id, seed=request.seed)
     observations = []
@@ -149,6 +154,7 @@ def run_grader(request: GraderRequest):
 
 
 @app.get("/baseline")
+@app.get("/openenv/baseline")
 def get_baseline(
     tier: TaskTier = TaskTier.EASY,
     task_id: str | None = None,
