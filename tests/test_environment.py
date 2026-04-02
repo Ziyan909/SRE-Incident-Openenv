@@ -33,6 +33,7 @@ class EnvironmentBehaviorTests(unittest.TestCase):
 
         self.assertEqual(reward.total, 0.0)
         self.assertFalse(env.result().solved)
+        self.assertEqual(env.state().services["db-postgres"].status.value, "degraded")
 
     def test_hard_mode_requires_ping_validation(self) -> None:
         env = SREIncidentEnv(tier=TaskTier.HARD, task_id="hard-payment-red-herrings")
@@ -83,6 +84,41 @@ class EnvironmentBehaviorTests(unittest.TestCase):
 
         self.assertGreaterEqual(reward.total, 0.1)
         self.assertTrue(env.result().solved)
+
+    def test_submit_requires_validation_after_mitigation(self) -> None:
+        env = SREIncidentEnv(tier=TaskTier.EASY, task_id="easy-auth-oom")
+
+        env.step(Action(action_type="ping_service", service="auth-service"))
+        env.step(Action(action_type="check_metrics", service="auth-service"))
+        observation, reward = env.step(Action(action_type="scale_up", service="auth-service", replicas=3))
+        self.assertIn("mitigated", observation.action_result)
+
+        observation, reward = env.step(
+            Action(
+                action_type="submit_diagnosis",
+                root_cause_service="auth-service",
+                root_cause_category="oom_crash",
+                fix_description="Scaled out auth-service to mitigate memory pressure.",
+            )
+        )
+
+        self.assertIn("validated", observation.action_result)
+        self.assertLess(reward.total, 0.0)
+        self.assertFalse(observation.episode_done)
+
+    def test_wrong_service_with_right_category_does_not_earn_positive_diagnosis_score(self) -> None:
+        env = SREIncidentEnv(tier=TaskTier.EASY, task_id="easy-auth-oom")
+
+        _observation, reward = env.step(
+            Action(
+                action_type="submit_diagnosis",
+                root_cause_service="payment-service",
+                root_cause_category="oom_crash",
+                fix_description="Incorrectly blamed payment-service.",
+            )
+        )
+
+        self.assertLessEqual(reward.total, 0.0)
 
     def test_same_seed_produces_same_variant(self) -> None:
         first = SREIncidentEnv(tier=TaskTier.EASY, task_id="easy-01", seed=4).state()

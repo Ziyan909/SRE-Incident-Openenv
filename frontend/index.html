@@ -35,7 +35,15 @@
     </div>
   </header>
 
-  <main class="canvas canvas-banners">
+  <nav class="view-tabs" aria-label="Console Views">
+    <button id="view-tab-tasks" class="view-tab is-active" data-view="tasks">Tasks</button>
+    <button id="view-tab-session" class="view-tab" data-view="session">Session</button>
+    <button id="view-tab-runtime" class="view-tab" data-view="runtime">Runtime</button>
+    <button id="view-tab-ai" class="view-tab" data-view="ai-control">AI Control</button>
+  </nav>
+
+  <section id="tasks-view" class="page-view is-active">
+  <main class="canvas canvas-single">
     <section class="tier-board">
       <div class="tier-banner tier-selector-shell">
         <div class="tier-banner-head">
@@ -61,7 +69,11 @@
         </div>
       </div>
     </section>
+  </main>
+  </section>
 
+  <section id="session-view" class="page-view">
+  <main class="canvas canvas-single">
     <section class="main-stack">
       <section class="panel">
         <div class="panel-header">
@@ -211,7 +223,11 @@
         </section>
       </section>
     </section>
+  </main>
+  </section>
 
+  <section id="runtime-view" class="page-view">
+  <main class="canvas canvas-single">
     <aside class="panel panel-telemetry">
       <div class="panel-header">
         <div>
@@ -298,7 +314,185 @@
       </section>
     </aside>
   </main>
+  </section>
 
-  <script src="/static/app.js?v=20260327-2" defer></script>
+  <section id="ai-control-view" class="page-view">
+    <main class="canvas canvas-single">
+      <section class="panel panel-ai-runtime">
+        <div class="panel-header">
+          <div>
+            <p class="panel-kicker">AI Runtime</p>
+            <h2>Provider Control Center</h2>
+          </div>
+          <div class="action-cluster">
+            <button id="ai-load-selected-task" class="btn btn-muted">Use Selected Task</button>
+            <button id="ai-save-settings" class="btn btn-muted">Save Settings</button>
+            <button id="ai-clear-settings" class="btn btn-solid">Clear Saved</button>
+          </div>
+        </div>
+
+        <p class="hero-description">
+          Configure provider credentials and model settings in the browser, run AI baselines or full benchmarks,
+          and compare the configured agent against the current human session without changing the parent console flow.
+        </p>
+
+        <div class="runtime-page-grid">
+          <section class="panel runtime-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Config</p>
+                <h2>Provider Settings</h2>
+              </div>
+            </div>
+
+            <div class="composer-grid runtime-form-grid">
+              <label class="field">
+                <span>Provider</span>
+                <select id="ai-provider">
+                  <option value="scripted">scripted</option>
+                  <option value="openai">openai</option>
+                  <option value="gemini">gemini</option>
+                  <option value="openrouter">openrouter</option>
+                  <option value="groq">groq</option>
+                  <option value="cerebras">cerebras</option>
+                  <option value="custom">custom</option>
+                </select>
+              </label>
+              <label class="field" id="ai-custom-provider-field">
+                <span>Custom Provider Name</span>
+                <input id="ai-custom-provider" placeholder="for example: together">
+              </label>
+              <label class="field">
+                <span>Model</span>
+                <input id="ai-model" placeholder="gpt-4.1-mini or provider model">
+              </label>
+              <label class="field">
+                <span>API Key</span>
+                <input id="ai-api-key" type="password" placeholder="provider API key">
+              </label>
+              <label class="field field-span-2">
+                <span>Base URL</span>
+                <input id="ai-base-url" placeholder="optional OpenAI-compatible base URL">
+              </label>
+            </div>
+
+            <div class="info-strip runtime-info-strip">
+              <article class="info-card">
+                <span>Selected Task</span>
+                <strong id="ai-selected-task">none</strong>
+              </article>
+              <article class="info-card">
+                <span>Tier</span>
+                <strong id="ai-selected-tier">-</strong>
+              </article>
+              <article class="info-card">
+                <span>Session Seed</span>
+                <strong id="ai-selected-seed">0</strong>
+              </article>
+              <article class="info-card info-card-wide">
+                <span>Current Human Session</span>
+                <strong id="ai-current-session">none</strong>
+              </article>
+            </div>
+
+            <div id="ai-settings-status" class="alert-list is-empty">Saved runtime settings will appear here.</div>
+          </section>
+
+          <section class="panel runtime-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Actions</p>
+                <h2>Run AI Workflows</h2>
+              </div>
+            </div>
+
+            <div class="composer-grid runtime-form-grid">
+              <label class="field">
+                <span>Run Seed</span>
+                <input id="ai-run-seed" type="number" min="0" value="0">
+              </label>
+              <label class="field">
+                <span>Benchmark Seeds</span>
+                <input id="ai-benchmark-seeds" type="number" min="1" max="5" value="1">
+              </label>
+              <label class="field">
+                <span>Persist In Browser</span>
+                <select id="ai-persist-mode">
+                  <option value="save">save</option>
+                  <option value="session">session only</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Credential Mode</span>
+                <select id="ai-credential-mode">
+                  <option value="request">request scoped</option>
+                  <option value="memory">browser memory only</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="action-cluster runtime-action-stack">
+              <button id="ai-run-baseline" class="btn btn-solid">Run AI Baseline</button>
+              <button id="ai-run-benchmark" class="btn btn-muted">Run AI Benchmark</button>
+              <button id="ai-run-compare" class="btn btn-muted">Compare To Human</button>
+            </div>
+
+            <p class="hero-description">
+              The AI runtime page sends provider configuration per request so the current console and existing
+              scripted/human flows remain unchanged.
+            </p>
+
+            <div id="ai-validation-output" class="alert-list is-empty">Provider validation messages appear here.</div>
+          </section>
+        </div>
+
+        <div class="runtime-page-grid runtime-results-grid">
+          <section class="panel runtime-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Results</p>
+                <h2>AI Baseline Output</h2>
+              </div>
+            </div>
+            <div id="ai-baseline-output" class="is-empty">Run an AI baseline on the selected task to see results here.</div>
+          </section>
+
+          <section class="panel runtime-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Results</p>
+                <h2>AI Benchmark Output</h2>
+              </div>
+            </div>
+            <div id="ai-benchmark-output" class="is-empty">Run a benchmark to compare the configured AI across all scenarios.</div>
+          </section>
+        </div>
+
+        <div class="runtime-page-grid runtime-results-grid">
+          <section class="panel runtime-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Comparison</p>
+                <h2>Human vs AI</h2>
+              </div>
+            </div>
+            <div id="ai-compare-output" class="is-empty">Load a human session and compare it against the configured AI runtime.</div>
+          </section>
+
+          <section class="panel runtime-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Activity</p>
+                <h2>Runtime Notes</h2>
+              </div>
+            </div>
+            <div id="ai-run-history" class="is-empty">Saved runtime actions and recent AI runs appear here.</div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <script src="/static/app.js?v=20260402-1" defer></script>
 </body>
 </html>

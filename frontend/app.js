@@ -7,7 +7,11 @@ const state = {
   currentObservation: null,
   currentResult: null,
   timeline: [],
+  currentView: "tasks",
+  aiHistory: [],
 };
+
+const AI_RUNTIME_STORAGE_KEY = "sre-ai-runtime-settings-v1";
 
 const els = {
   taskCount:        document.getElementById("task-count"),
@@ -70,6 +74,31 @@ const els = {
   rootCauseService: document.getElementById("root-cause-service"),
   rootCauseCategory:document.getElementById("root-cause-category"),
   fixDescription:   document.getElementById("fix-description"),
+  viewTabs:         Array.from(document.querySelectorAll(".view-tab")),
+  tasksView:        document.getElementById("tasks-view"),
+  sessionView:      document.getElementById("session-view"),
+  runtimeView:      document.getElementById("runtime-view"),
+  aiControlView:    document.getElementById("ai-control-view"),
+  aiProvider:       document.getElementById("ai-provider"),
+  aiCustomProviderField: document.getElementById("ai-custom-provider-field"),
+  aiCustomProvider: document.getElementById("ai-custom-provider"),
+  aiModel:          document.getElementById("ai-model"),
+  aiApiKey:         document.getElementById("ai-api-key"),
+  aiBaseUrl:        document.getElementById("ai-base-url"),
+  aiSelectedTask:   document.getElementById("ai-selected-task"),
+  aiSelectedTier:   document.getElementById("ai-selected-tier"),
+  aiSelectedSeed:   document.getElementById("ai-selected-seed"),
+  aiCurrentSession: document.getElementById("ai-current-session"),
+  aiSettingsStatus: document.getElementById("ai-settings-status"),
+  aiValidationOutput: document.getElementById("ai-validation-output"),
+  aiRunSeed:        document.getElementById("ai-run-seed"),
+  aiBenchmarkSeeds: document.getElementById("ai-benchmark-seeds"),
+  aiPersistMode:    document.getElementById("ai-persist-mode"),
+  aiCredentialMode: document.getElementById("ai-credential-mode"),
+  aiBaselineOutput: document.getElementById("ai-baseline-output"),
+  aiBenchmarkOutput:document.getElementById("ai-benchmark-output"),
+  aiCompareOutput:  document.getElementById("ai-compare-output"),
+  aiRunHistory:     document.getElementById("ai-run-history"),
 };
 
 const actionTypes = [
@@ -84,6 +113,15 @@ function setStatus(text, mode = "idle") {
   badge.className = "status-pill " + (mode === "working" ? "status-working" : mode === "error" ? "status-error" : "status-ready");
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function reportError(context, error) {
   console.error(context, error);
   const message = error && error.message ? error.message : String(error);
@@ -96,6 +134,10 @@ function populateActionTypes() {
 
 function selectedTask() {
   return state.tasks.find(t => t.task_id === state.selectedTaskId) || null;
+}
+
+function currentSeedValue() {
+  return Number(els.sessionSeed.value || 0);
 }
 
 function tasksForTier(tier) {
@@ -189,6 +231,7 @@ function renderSelectedTask() {
     els.selectedTaskId.textContent = "random-on-start";
     els.serviceFocus.innerHTML = "";
     els.actionSpace.innerHTML = "";
+    renderAiTaskContext();
     return;
   }
   els.selectedTaskName.textContent = task.name;
@@ -199,6 +242,7 @@ function renderSelectedTask() {
   els.selectedTaskId.textContent = task.task_id;
   els.serviceFocus.innerHTML = `<span class="chip">Service focus hidden until investigated</span>`;
   els.actionSpace.innerHTML = task.action_space.map(s => `<span class="chip">${s}</span>`).join("");
+  renderAiTaskContext();
 }
 
 function guidanceForTier(tier) {
@@ -450,34 +494,42 @@ function renderQueue() {
 
 function renderBaseline(result) {
   els.baselineOutput.className = "";
-  els.baselineOutput.innerHTML = `
+  els.baselineOutput.innerHTML = baselineMarkup(result);
+}
+
+function baselineMarkup(result) {
+  return `
     <div class="result-grid">
-      <div class="result-stat"><span>Task</span><strong>${result.task_id}</strong></div>
-      <div class="result-stat"><span>Mode</span><strong>${result.mode}</strong></div>
-      <div class="result-stat"><span>Score</span><strong>${result.score}</strong></div>
-      <div class="result-stat"><span>Steps</span><strong>${result.steps_taken}</strong></div>
+      <div class="result-stat"><span>Task</span><strong>${escapeHtml(result.task_id)}</strong></div>
+      <div class="result-stat"><span>Mode</span><strong>${escapeHtml(result.mode)}</strong></div>
+      <div class="result-stat"><span>Score</span><strong>${escapeHtml(result.score)}</strong></div>
+      <div class="result-stat"><span>Steps</span><strong>${escapeHtml(result.steps_taken)}</strong></div>
     </div>
-    <p class="tiny">solved=${result.solved} · seed=${result.seed}${result.model ? ` · model=${result.model}` : ""}</p>
-    ${result.error ? `<p class="tiny">error=${result.error}</p>` : ""}
+    <p class="tiny">solved=${escapeHtml(result.solved)} · seed=${escapeHtml(result.seed)}${result.model ? ` · model=${escapeHtml(result.model)}` : ""}</p>
+    ${result.error ? `<p class="tiny">error=${escapeHtml(result.error)}</p>` : ""}
     ${renderAnalyticsTiny(result.analytics)}
   `;
 }
 
 function renderBenchmark(report) {
   els.benchmarkOutput.className = "";
-  els.benchmarkOutput.innerHTML = `
+  els.benchmarkOutput.innerHTML = benchmarkMarkup(report);
+}
+
+function benchmarkMarkup(report) {
+  return `
     <div class="result-grid">
-      <div class="result-stat"><span>Scenarios</span><strong>${report.scenario_count}</strong></div>
-      <div class="result-stat"><span>Templates</span><strong>${report.template_count}</strong></div>
+      <div class="result-stat"><span>Scenarios</span><strong>${escapeHtml(report.scenario_count)}</strong></div>
+      <div class="result-stat"><span>Templates</span><strong>${escapeHtml(report.template_count)}</strong></div>
       <div class="result-stat"><span>Avg Score</span><strong>${report.overall_average_score.toFixed(2)}</strong></div>
       <div class="result-stat"><span>Solve Rate</span><strong>${(report.overall_solve_rate * 100).toFixed(0)}%</strong></div>
-      <div class="result-stat"><span>Mode</span><strong>${report.mode}</strong></div>
+      <div class="result-stat"><span>Mode</span><strong>${escapeHtml(report.mode)}</strong></div>
     </div>
-    <p class="tiny">public=${report.public_scenario_count} holdout=${report.holdout_scenario_count} generated_at=${report.generated_at}</p>
-    ${report.tier_summaries.map((item) => `<p class="tiny">${item.tier}: avg=${item.average_score.toFixed(2)} solve_rate=${(item.solve_rate * 100).toFixed(0)}% steps=${item.average_steps.toFixed(1)}</p>`).join("")}
+    <p class="tiny">public=${escapeHtml(report.public_scenario_count)} holdout=${escapeHtml(report.holdout_scenario_count)} generated_at=${escapeHtml(report.generated_at)}</p>
+    ${report.tier_summaries.map((item) => `<p class="tiny">${escapeHtml(item.tier)}: avg=${item.average_score.toFixed(2)} solve_rate=${(item.solve_rate * 100).toFixed(0)}% steps=${item.average_steps.toFixed(1)}</p>`).join("")}
     ${renderAnalyticsTiny(report.analytics_summary)}
-    <p class="tiny">families: ${Object.entries(report.family_breakdown).map(([name, count]) => `${name}=${count}`).join(" · ")}</p>
-    ${report.hardest_scenarios.map((item) => `<p class="tiny">hard case: ${item.task_id} score=${item.score.toFixed(2)} solved=${item.solved}</p>`).join("")}
+    <p class="tiny">families: ${Object.entries(report.family_breakdown).map(([name, count]) => `${escapeHtml(name)}=${escapeHtml(count)}`).join(" · ")}</p>
+    ${report.hardest_scenarios.map((item) => `<p class="tiny">hard case: ${escapeHtml(item.task_id)} score=${item.score.toFixed(2)} solved=${escapeHtml(item.solved)}</p>`).join("")}
   `;
 }
 
@@ -532,15 +584,19 @@ function renderBenchmarkHistory(items) {
 }
 
 function renderComparison(payload) {
+  els.comparisonOutput.className = "";
+  els.comparisonOutput.innerHTML = comparisonMarkup(payload);
+}
+
+function comparisonMarkup(payload) {
   const human = payload.human?.result || {};
   const scripted = payload.scripted?.summary || {};
   const selected = payload.selected?.summary || null;
-  els.comparisonOutput.className = "";
-  els.comparisonOutput.innerHTML = `
-    <p class="tiny">scenario=${payload.scenario_id} seed=${payload.seed}</p>
-    <p class="tiny">human score=${human.final_score ?? "n/a"} solved=${human.solved ?? false}</p>
-    <p class="tiny">scripted score=${scripted.score ?? "n/a"} solved=${scripted.solved ?? false}</p>
-    ${selected ? `<p class="tiny">${selected.mode} score=${selected.score ?? "n/a"} solved=${selected.solved ?? false}${selected.error ? ` error=${selected.error}` : ""}</p>` : `<p class="tiny">selected baseline not requested.</p>`}
+  return `
+    <p class="tiny">scenario=${escapeHtml(payload.scenario_id)} seed=${escapeHtml(payload.seed)}</p>
+    <p class="tiny">human score=${escapeHtml(human.final_score ?? "n/a")} solved=${escapeHtml(human.solved ?? false)}</p>
+    <p class="tiny">scripted score=${escapeHtml(scripted.score ?? "n/a")} solved=${escapeHtml(scripted.solved ?? false)}</p>
+    ${selected ? `<p class="tiny">${escapeHtml(selected.mode)} score=${escapeHtml(selected.score ?? "n/a")} solved=${escapeHtml(selected.solved ?? false)}${selected.error ? ` error=${escapeHtml(selected.error)}` : ""}</p>` : `<p class="tiny">selected baseline not requested.</p>`}
     ${human.analytics ? `<p class="tiny">human ${analyticsLine(human.analytics)}</p>` : ""}
     ${scripted.analytics ? `<p class="tiny">scripted ${analyticsLine(scripted.analytics)}</p>` : ""}
     ${selected?.analytics ? `<p class="tiny">${selected.mode} ${analyticsLine(selected.analytics)}</p>` : ""}
@@ -593,6 +649,294 @@ function renderTimeline() {
 
 function renderSessionState() {
   els.sessionState.textContent = state.sessionId ? "Active" : "Idle";
+  renderAiTaskContext();
+}
+
+function renderAiTaskContext() {
+  const task = selectedTask();
+  els.aiSelectedTask.textContent = task ? task.task_id : "random-on-start";
+  els.aiSelectedTier.textContent = task ? task.tier : state.activeTier;
+  els.aiSelectedSeed.textContent = String(currentSeedValue());
+  els.aiCurrentSession.textContent = state.sessionId || "none";
+}
+
+function setView(view) {
+  state.currentView = view;
+  els.tasksView.classList.toggle("is-active", view === "tasks");
+  els.sessionView.classList.toggle("is-active", view === "session");
+  els.runtimeView.classList.toggle("is-active", view === "runtime");
+  els.aiControlView.classList.toggle("is-active", view === "ai-control");
+  els.viewTabs.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.view === view);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function selectedAiProviderName() {
+  if (els.aiProvider.value !== "custom") {
+    return els.aiProvider.value;
+  }
+  return els.aiCustomProvider.value.trim().toLowerCase();
+}
+
+function syncAiProviderFields() {
+  const isCustom = els.aiProvider.value === "custom";
+  els.aiCustomProviderField.classList.toggle("is-visible", isCustom);
+  if (!isCustom) {
+    els.aiCustomProvider.value = "";
+  }
+}
+
+function collectAiRuntimeConfig() {
+  return {
+    provider: selectedAiProviderName() || "scripted",
+    model: els.aiModel.value.trim() || null,
+    api_key: els.aiCredentialMode.value === "memory" ? null : (els.aiApiKey.value.trim() || null),
+    base_url: els.aiBaseUrl.value.trim() || null,
+  };
+}
+
+function validateAiRuntimeConfig() {
+  const provider = selectedAiProviderName();
+  if (!provider) {
+    return "Custom provider name is required.";
+  }
+  if (provider !== "scripted") {
+    if (!els.aiModel.value.trim()) {
+      return "Model is required for AI providers.";
+    }
+    if (els.aiCredentialMode.value === "request" && !els.aiApiKey.value.trim()) {
+      return "API key is required when using request-scoped credentials.";
+    }
+  }
+  return null;
+}
+
+function renderAiSettingsStatus(message = null) {
+  const lines = [];
+  const provider = selectedAiProviderName() || "scripted";
+  lines.push(`provider=${escapeHtml(provider)}`);
+  lines.push(`model=${escapeHtml(els.aiModel.value.trim() || "unset")}`);
+  lines.push(`base_url=${escapeHtml(els.aiBaseUrl.value.trim() || "default")}`);
+  lines.push(`credentials=${escapeHtml(els.aiApiKey.value ? "loaded" : "empty")}`);
+  lines.push(`persist=${escapeHtml(els.aiPersistMode.value)}`);
+  lines.push(`mode=${escapeHtml(els.aiCredentialMode.value)}`);
+  els.aiSettingsStatus.className = "alert-list";
+  els.aiSettingsStatus.innerHTML = [
+    ...(message ? [`<article class="alert-item">${escapeHtml(message)}</article>`] : []),
+    `<article class="alert-item">${lines.join(" · ")}</article>`,
+  ].join("");
+}
+
+function renderAiValidation(message = null, isError = false) {
+  if (!message) {
+    els.aiValidationOutput.className = "alert-list is-empty";
+    els.aiValidationOutput.textContent = "Provider validation messages appear here.";
+    return;
+  }
+  els.aiValidationOutput.className = "alert-list";
+  els.aiValidationOutput.innerHTML = `<article class="alert-item">${escapeHtml(message)}</article>`;
+  if (isError) {
+    setStatus(message, "error");
+  }
+}
+
+function appendAiHistory(line) {
+  state.aiHistory.unshift(`${new Date().toLocaleTimeString()} · ${line}`);
+  state.aiHistory = state.aiHistory.slice(0, 8);
+  renderAiHistory();
+}
+
+function renderAiHistory() {
+  if (!state.aiHistory.length) {
+    els.aiRunHistory.className = "is-empty";
+    els.aiRunHistory.textContent = "Saved runtime actions and recent AI runs appear here.";
+    return;
+  }
+  els.aiRunHistory.className = "";
+  els.aiRunHistory.innerHTML = state.aiHistory.map((line) => `<p class="tiny">${escapeHtml(line)}</p>`).join("");
+}
+
+function loadAiRuntimeSettings() {
+  const raw = window.localStorage.getItem(AI_RUNTIME_STORAGE_KEY);
+  if (!raw) {
+    syncAiProviderFields();
+    renderAiSettingsStatus("No saved AI runtime settings found.");
+    return;
+  }
+  try {
+    const saved = JSON.parse(raw);
+    els.aiProvider.value = saved.provider_select || "scripted";
+    els.aiCustomProvider.value = saved.custom_provider || "";
+    els.aiModel.value = saved.model || "";
+    els.aiApiKey.value = saved.api_key || "";
+    els.aiBaseUrl.value = saved.base_url || "";
+    els.aiPersistMode.value = saved.persist_mode || "save";
+    els.aiCredentialMode.value = saved.credential_mode || "request";
+    els.aiRunSeed.value = String(saved.run_seed ?? currentSeedValue());
+    els.aiBenchmarkSeeds.value = String(saved.benchmark_seeds ?? 1);
+    syncAiProviderFields();
+    renderAiSettingsStatus("Restored AI runtime settings from browser storage.");
+  } catch (_error) {
+    syncAiProviderFields();
+    renderAiSettingsStatus("Saved AI runtime settings were unreadable and were ignored.");
+  }
+}
+
+function saveAiRuntimeSettings() {
+  const persistMode = els.aiPersistMode.value;
+  const payload = {
+    provider_select: els.aiProvider.value,
+    custom_provider: els.aiCustomProvider.value.trim(),
+    model: els.aiModel.value.trim(),
+    api_key: els.aiCredentialMode.value === "request" && persistMode === "save" ? els.aiApiKey.value.trim() : "",
+    base_url: els.aiBaseUrl.value.trim(),
+    persist_mode: persistMode,
+    credential_mode: els.aiCredentialMode.value,
+    run_seed: Number(els.aiRunSeed.value || 0),
+    benchmark_seeds: Number(els.aiBenchmarkSeeds.value || 1),
+  };
+  window.localStorage.setItem(AI_RUNTIME_STORAGE_KEY, JSON.stringify(payload));
+  renderAiSettingsStatus("Saved AI runtime settings to browser storage.");
+  appendAiHistory(`saved runtime settings for ${selectedAiProviderName() || "scripted"}`);
+}
+
+function clearAiRuntimeSettings() {
+  window.localStorage.removeItem(AI_RUNTIME_STORAGE_KEY);
+  els.aiProvider.value = "scripted";
+  els.aiCustomProvider.value = "";
+  els.aiModel.value = "";
+  els.aiApiKey.value = "";
+  els.aiBaseUrl.value = "";
+  els.aiPersistMode.value = "save";
+  els.aiCredentialMode.value = "request";
+  els.aiRunSeed.value = String(currentSeedValue());
+  els.aiBenchmarkSeeds.value = "1";
+  syncAiProviderFields();
+  renderAiSettingsStatus("Cleared saved AI runtime settings.");
+  renderAiValidation();
+  appendAiHistory("cleared saved runtime settings");
+}
+
+function syncAiWithSelectedTask() {
+  els.aiRunSeed.value = String(currentSeedValue());
+  renderAiTaskContext();
+  renderAiSettingsStatus("Loaded the current task and session context into the AI page.");
+}
+
+function renderAiBaseline(result) {
+  els.aiBaselineOutput.className = "";
+  els.aiBaselineOutput.innerHTML = baselineMarkup(result);
+}
+
+function renderAiBenchmark(report) {
+  els.aiBenchmarkOutput.className = "";
+  els.aiBenchmarkOutput.innerHTML = benchmarkMarkup(report);
+}
+
+function renderAiCompare(payload) {
+  const human = payload.human?.result || {};
+  const selected = payload.selected?.summary || {};
+  els.aiCompareOutput.className = "";
+  els.aiCompareOutput.innerHTML = `
+    <p class="tiny">scenario=${escapeHtml(payload.scenario_id)} seed=${escapeHtml(payload.seed)} session=${escapeHtml(payload.session_id)}</p>
+    <p class="tiny">human score=${escapeHtml(human.final_score ?? "n/a")} solved=${escapeHtml(human.solved ?? false)}</p>
+    <p class="tiny">${escapeHtml(selected.mode ?? "selected")} score=${escapeHtml(selected.score ?? "n/a")} solved=${escapeHtml(selected.solved ?? false)}${selected.error ? ` error=${escapeHtml(selected.error)}` : ""}</p>
+    ${human.analytics ? `<p class="tiny">human ${analyticsLine(human.analytics)}</p>` : ""}
+    ${selected.analytics ? `<p class="tiny">${escapeHtml(selected.mode)} ${analyticsLine(selected.analytics)}</p>` : ""}
+  `;
+}
+
+async function runAiBaseline() {
+  const task = ensureTaskSelection({ randomize: true });
+  if (!task) return;
+  const validationError = validateAiRuntimeConfig();
+  if (validationError) {
+    renderAiValidation(validationError, true);
+    return;
+  }
+  setStatus("Running AI baseline…", "working");
+  renderAiValidation("Running AI baseline with request-scoped provider settings.");
+  try {
+    const payload = await requestJson("/runtime/baseline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tier: task.tier,
+        task_id: task.task_id,
+        seed: Number(els.aiRunSeed.value || 0),
+        runtime: collectAiRuntimeConfig(),
+      }),
+    });
+    renderAiBaseline(payload);
+    renderAiValidation(`AI baseline completed for ${task.task_id}.`);
+    appendAiHistory(`baseline ${selectedAiProviderName()} on ${task.task_id} score=${payload.score}`);
+    if (els.aiPersistMode.value === "save") saveAiRuntimeSettings();
+    setStatus("Ready");
+  } catch (error) {
+    reportError("AI baseline failed", error);
+    renderAiValidation(error.message || "AI baseline failed.", true);
+  }
+}
+
+async function runAiBenchmark() {
+  const validationError = validateAiRuntimeConfig();
+  if (validationError) {
+    renderAiValidation(validationError, true);
+    return;
+  }
+  setStatus("Running AI benchmark…", "working");
+  renderAiValidation("Running AI benchmark with request-scoped provider settings.");
+  try {
+    const payload = await requestJson("/runtime/benchmark", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        seeds_per_scenario: Math.max(1, Number(els.aiBenchmarkSeeds.value || 1)),
+        runtime: collectAiRuntimeConfig(),
+      }),
+    });
+    renderAiBenchmark(payload);
+    renderAiValidation(`AI benchmark completed with ${payload.scenario_count} scenarios.`);
+    appendAiHistory(`benchmark ${selectedAiProviderName()} avg=${payload.overall_average_score.toFixed(2)}`);
+    if (els.aiPersistMode.value === "save") saveAiRuntimeSettings();
+    setStatus("Ready");
+  } catch (error) {
+    reportError("AI benchmark failed", error);
+    renderAiValidation(error.message || "AI benchmark failed.", true);
+  }
+}
+
+async function runAiCompare() {
+  if (!state.sessionId) {
+    renderAiValidation("Start or load a human session before running AI comparison.", true);
+    return;
+  }
+  const validationError = validateAiRuntimeConfig();
+  if (validationError) {
+    renderAiValidation(validationError, true);
+    return;
+  }
+  setStatus("Running AI comparison…", "working");
+  renderAiValidation("Comparing the configured AI runtime against the active human session.");
+  try {
+    const payload = await requestJson("/runtime/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: state.sessionId,
+        runtime: collectAiRuntimeConfig(),
+      }),
+    });
+    renderAiCompare(payload);
+    renderAiValidation(`AI comparison completed for session ${state.sessionId}.`);
+    appendAiHistory(`compare ${selectedAiProviderName()} vs human session ${state.sessionId}`);
+    if (els.aiPersistMode.value === "save") saveAiRuntimeSettings();
+    setStatus("Ready");
+  } catch (error) {
+    reportError("AI comparison failed", error);
+    renderAiValidation(error.message || "AI comparison failed.", true);
+  }
 }
 
 function collectAction() {
@@ -792,7 +1136,22 @@ document.getElementById("clear-actions").addEventListener("click", () => { state
 document.querySelectorAll(".tier-mode-button").forEach((button) => {
   button.addEventListener("click", () => setActiveTier(button.dataset.tier));
 });
+els.viewTabs.forEach((button) => {
+  button.addEventListener("click", () => setView(button.dataset.view));
+});
+document.getElementById("ai-load-selected-task").addEventListener("click", syncAiWithSelectedTask);
+document.getElementById("ai-save-settings").addEventListener("click", saveAiRuntimeSettings);
+document.getElementById("ai-clear-settings").addEventListener("click", clearAiRuntimeSettings);
+document.getElementById("ai-run-baseline").addEventListener("click", runAiBaseline);
+document.getElementById("ai-run-benchmark").addEventListener("click", runAiBenchmark);
+document.getElementById("ai-run-compare").addEventListener("click", runAiCompare);
+els.aiProvider.addEventListener("change", () => {
+  syncAiProviderFields();
+  renderAiSettingsStatus("Updated provider selection.");
+});
 
 populateActionTypes();
-renderQueue(); renderObservation(); renderSummary(); renderTimeline(); renderSessionState();
+syncAiProviderFields();
+renderQueue(); renderObservation(); renderSummary(); renderTimeline(); renderSessionState(); renderAiHistory();
+loadAiRuntimeSettings();
 loadTasks();

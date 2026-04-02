@@ -6,6 +6,10 @@ import unittest
 from api.server import (
     HTTPException,
     ResetRequest,
+    RuntimeBaselineRequest,
+    RuntimeBenchmarkRequest,
+    RuntimeCompareRequest,
+    RuntimeConfig,
     StepRequest,
     compare_session,
     get_benchmark,
@@ -14,6 +18,9 @@ from api.server import (
     get_tasks,
     list_sessions,
     reset_environment,
+    run_runtime_baseline,
+    run_runtime_benchmark,
+    run_runtime_compare,
     state_environment,
     step_environment,
 )
@@ -130,6 +137,40 @@ class ApiContractTests(unittest.TestCase):
     def test_benchmark_provider_field_defaults_to_mode(self) -> None:
         payload = get_benchmark(seeds_per_scenario=1)
         self.assertEqual(payload["provider"], payload["mode"])
+
+    def test_hidden_task_ids_are_not_accessible_via_api(self) -> None:
+        for task_id in ("easy-05", "medium-05", "hard-05"):
+            with self.assertRaises(HTTPException) as exc:
+                reset_environment(ResetRequest(tier=TaskTier.EASY, task_id=task_id, seed=0))
+            self.assertEqual(exc.exception.status_code, 404)
+
+    def test_runtime_baseline_endpoint_supports_scripted_runs(self) -> None:
+        payload = run_runtime_baseline(
+            RuntimeBaselineRequest(
+                tier=TaskTier.EASY,
+                task_id="easy-01",
+                seed=0,
+                runtime=RuntimeConfig(provider="scripted"),
+            )
+        )
+        self.assertEqual(payload["mode"], "scripted")
+        self.assertEqual(payload["task_id"], "easy-01")
+
+    def test_runtime_benchmark_endpoint_supports_scripted_runs(self) -> None:
+        payload = run_runtime_benchmark(RuntimeBenchmarkRequest(runtime=RuntimeConfig(provider="scripted")))
+        self.assertEqual(payload["mode"], "scripted")
+        self.assertEqual(payload["scenario_count"], 15)
+
+    def test_runtime_compare_endpoint_returns_human_and_selected(self) -> None:
+        payload = reset_environment(ResetRequest(tier=TaskTier.EASY, task_id="easy-01", seed=0))
+        comparison = run_runtime_compare(
+            RuntimeCompareRequest(
+                session_id=payload["session_id"],
+                runtime=RuntimeConfig(provider="scripted"),
+            )
+        )
+        self.assertIn("human", comparison)
+        self.assertIn("selected", comparison)
 
 
 if __name__ == "__main__":

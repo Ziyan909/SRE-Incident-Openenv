@@ -402,28 +402,31 @@ class SREIncidentEnv:
             state.metrics.restart_count += 1
             return f"Restarted healthy service {service}; no improvement expected."
 
-        state.metrics.restart_count += 1
         if service == episode.scenario.root_cause_service and episode.scenario.correct_fix_action == ActionType.RESTART_SERVICE:
             if not self._has_required_investigation(service):
-                return f"Restarted {service}; service may recover, but the fix was applied before sufficient investigation."
+                return f"Restart blocked for {service}; gather more evidence before applying the root-cause fix."
             if not episode.reward_flags.fix_bonus_awarded:
                 breakdown.correct_fix_applied += 0.30
                 episode.reward_flags.fix_bonus_awarded = True
                 episode.first_fix_step = episode.step_number
                 episode.recovery_validated = False
+            state.metrics.restart_count += 1
             return f"Restarted {service}; service recovered."
         if service == episode.scenario.root_cause_service and ActionType.RESTART_SERVICE in episode.scenario.acceptable_fix_actions:
             if not self._has_required_investigation(service):
-                return f"Restarted {service}; mitigation may help, but it was applied before sufficient investigation."
+                return f"Restart blocked for {service}; gather more evidence before applying the mitigation."
             if not episode.reward_flags.mitigation_bonus_awarded:
                 breakdown.acceptable_fix_applied += 0.20
                 episode.reward_flags.mitigation_bonus_awarded = True
                 episode.first_mitigation_step = episode.step_number
                 episode.recovery_validated = False
+            state.metrics.restart_count += 1
             return f"Restarted {service}; service stabilized, but a more permanent remediation may still be warranted."
         if service in episode.scenario.secondary_root_causes and episode.scenario.secondary_fix_actions.get(service) == ActionType.RESTART_SERVICE:
+            state.metrics.restart_count += 1
             return f"Restarted {service}; a secondary fault improved, but the primary incident remains."
 
+        state.metrics.restart_count += 1
         breakdown.wrong_action_penalty -= 0.15
         return f"Restarted {service}; issue persists because this is a downstream symptom."
 
@@ -437,19 +440,19 @@ class SREIncidentEnv:
         if target_version is None:
             breakdown.wrong_action_penalty -= 0.10
             return "Rollback requested without a target version."
-        episode.services[service].version = target_version
         if (
             service == episode.scenario.root_cause_service
             and episode.scenario.correct_fix_action == ActionType.ROLLBACK_DEPLOY
             and target_version == episode.scenario.correct_fix_version
         ):
             if not self._has_required_investigation(service):
-                return f"Rolled back {service} to {target_version}; change applied before the root cause was fully investigated."
+                return f"Rollback blocked for {service}; gather more evidence before applying the root-cause fix."
             if not episode.reward_flags.fix_bonus_awarded:
                 breakdown.correct_fix_applied += 0.30
                 episode.reward_flags.fix_bonus_awarded = True
                 episode.first_fix_step = episode.step_number
                 episode.recovery_validated = False
+            episode.services[service].version = target_version
             return f"Rolled back {service} to {target_version}; deploy issue cleared."
         if (
             service == episode.scenario.root_cause_service
@@ -457,19 +460,22 @@ class SREIncidentEnv:
             and target_version in episode.scenario.acceptable_fix_versions
         ):
             if not self._has_required_investigation(service):
-                return f"Rolled back {service} to {target_version}; mitigation was applied before the root cause was sufficiently investigated."
+                return f"Rollback blocked for {service}; gather more evidence before applying the mitigation."
             if not episode.reward_flags.mitigation_bonus_awarded:
                 breakdown.acceptable_fix_applied += 0.20
                 episode.reward_flags.mitigation_bonus_awarded = True
                 episode.first_mitigation_step = episode.step_number
                 episode.recovery_validated = False
+            episode.services[service].version = target_version
             return f"Rolled back {service} to {target_version}; service stabilized with an acceptable mitigation."
         if (
             service in episode.scenario.secondary_root_causes
             and episode.scenario.secondary_fix_actions.get(service) == ActionType.ROLLBACK_DEPLOY
             and target_version == episode.scenario.secondary_fix_versions.get(service)
         ):
+            episode.services[service].version = target_version
             return f"Rolled back {service} to {target_version}; a secondary fault improved, but the primary incident remains."
+        episode.services[service].version = target_version
         breakdown.wrong_action_penalty -= 0.15
         return f"Rolled back {service} to {target_version}; no root-cause improvement."
 
@@ -488,7 +494,6 @@ class SREIncidentEnv:
                 f"Scale up requested for {service} to {target_replicas} replicas, "
                 "but the target is not higher than the current replica count."
             )
-        episode.services[service].metrics.replicas = target_replicas
         if service == episode.scenario.root_cause_service and episode.scenario.root_cause_category in {
             RootCauseCategory.OOM_CRASH,
             RootCauseCategory.MEMORY_LEAK,
@@ -499,25 +504,27 @@ class SREIncidentEnv:
                 and episode.services[service].metrics.replicas >= episode.scenario.correct_fix_replicas
             ):
                 if not self._has_required_investigation(service):
-                    return f"Scaled {service} to {episode.services[service].metrics.replicas} replicas, but the change was made before enough evidence was gathered."
+                    return f"Scale-up blocked for {service}; gather more evidence before applying the root-cause fix."
                 if not episode.reward_flags.fix_bonus_awarded:
                     breakdown.correct_fix_applied += 0.30
                     episode.reward_flags.fix_bonus_awarded = True
                     episode.first_fix_step = episode.step_number
                     episode.recovery_validated = False
+                episode.services[service].metrics.replicas = target_replicas
                 return f"Scaled {service} to {episode.services[service].metrics.replicas} replicas; service stabilized."
             if (
                 ActionType.SCALE_UP in episode.scenario.acceptable_fix_actions
                 and episode.scenario.acceptable_fix_replicas
-                and episode.services[service].metrics.replicas >= min(episode.scenario.acceptable_fix_replicas)
+                and target_replicas >= min(episode.scenario.acceptable_fix_replicas)
             ):
                 if not self._has_required_investigation(service):
-                    return f"Scaled {service} to {episode.services[service].metrics.replicas} replicas, but the change was made before enough evidence was gathered."
+                    return f"Scale-up blocked for {service}; gather more evidence before applying the mitigation."
                 if not episode.reward_flags.mitigation_bonus_awarded:
                     breakdown.acceptable_fix_applied += 0.20
                     episode.reward_flags.mitigation_bonus_awarded = True
                     episode.first_mitigation_step = episode.step_number
                     episode.recovery_validated = False
+                episode.services[service].metrics.replicas = target_replicas
                 return f"Scaled {service} to {episode.services[service].metrics.replicas} replicas; the incident is mitigated even if deeper remediation may still be needed."
             breakdown.wrong_action_penalty -= 0.15
             return f"Scaled {service}, but the root issue still needs a corrective fix."
@@ -525,12 +532,14 @@ class SREIncidentEnv:
             service in episode.scenario.secondary_root_causes
             and episode.scenario.secondary_fix_actions.get(service) == ActionType.SCALE_UP
             and episode.scenario.secondary_fix_replicas.get(service) is not None
-            and episode.services[service].metrics.replicas >= episode.scenario.secondary_fix_replicas[service]
+            and target_replicas >= episode.scenario.secondary_fix_replicas[service]
         ):
+            episode.services[service].metrics.replicas = target_replicas
             return (
                 f"Scaled {service} to {episode.services[service].metrics.replicas} replicas; "
                 "a secondary fault improved, but the primary incident remains."
             )
+        episode.services[service].metrics.replicas = target_replicas
         breakdown.wrong_action_penalty -= 0.10
         return f"Scaled {service}; capacity increased but the incident remains."
 
@@ -540,7 +549,12 @@ class SREIncidentEnv:
         correct_category = action.root_cause_category == episode.scenario.root_cause_category
         explanation_present = bool(action.fix_description and action.fix_description.strip())
 
-        if correct_service and correct_category and episode.reward_flags.fix_bonus_awarded and not episode.recovery_validated:
+        if (
+            correct_service
+            and correct_category
+            and (episode.reward_flags.fix_bonus_awarded or episode.reward_flags.mitigation_bonus_awarded)
+            and not episode.recovery_validated
+        ):
             breakdown.wrong_action_penalty -= 0.10
             if episode.scenario.tier == TaskTier.HARD:
                 return "Diagnosis withheld until recovery is validated with an explicit ping against the repaired service."
@@ -549,7 +563,7 @@ class SREIncidentEnv:
         episode.done = True
         episode.final_diagnosis = action
 
-        if correct_category and not episode.reward_flags.root_cause_bonus_awarded:
+        if correct_service and correct_category and not episode.reward_flags.root_cause_bonus_awarded:
             breakdown.correct_root_cause += 0.30
             episode.reward_flags.root_cause_bonus_awarded = True
         if explanation_present and correct_service and correct_category and not episode.reward_flags.diagnosis_bonus_awarded:

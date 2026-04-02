@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
+from contextlib import contextmanager
 
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -16,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from env.baseline_runner import BaselineResponse, run_benchmark, run_requested_baseline
 from env.environment import SREIncidentEnv
-from env.incidents import list_tasks, public_task_id_for
+from env.incidents import get_scenario, list_tasks, public_task_id_for
 from env.models import Action, ReplayRecord, ReplayStep, TaskTier
 
 
@@ -41,6 +44,7 @@ class SessionEntry:
 SESSIONS: dict[str, SessionEntry] = {}
 SESSION_TTL_SECONDS = max(60, int(os.getenv("SESSION_TTL_SECONDS", "7200")))
 MAX_ACTIVE_SESSIONS = max(1, int(os.getenv("MAX_ACTIVE_SESSIONS", "500")))
+RUNTIME_ENV_LOCK = Lock()
 
 
 class GraderRequest(BaseModel):
@@ -61,6 +65,30 @@ class StepRequest(BaseModel):
     action: Action
 
 
+class RuntimeConfig(BaseModel):
+    provider: str = "scripted"
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+
+
+class RuntimeBaselineRequest(BaseModel):
+    tier: TaskTier = TaskTier.EASY
+    task_id: str | None = None
+    seed: int = 0
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+
+
+class RuntimeBenchmarkRequest(BaseModel):
+    seeds_per_scenario: int = Field(default=1, ge=1)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+
+
+class RuntimeCompareRequest(BaseModel):
+    session_id: str
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+
+
 @app.get("/")
 def frontend():
     return FileResponse(FRONTEND_DIR / "index.html")
@@ -74,7 +102,10 @@ def get_tasks():
 
 @app.post("/reset")
 @app.post("/openenv/reset")
-def reset_environment(request: ResetRequest):
+def reset_environment(request: ResetRequest | None = None):
+    if request is None:
+        request = ResetRequest()
+    _validate_public_task_request(request.task_id)
     _cleanup_sessions()
     env = SREIncidentEnv(tier=request.tier, task_id=request.task_id, seed=request.seed)
     session_id = uuid4().hex
@@ -137,6 +168,7 @@ def state_environment(session_id: str):
 @app.post("/grader")
 @app.post("/openenv/grader")
 def run_grader(request: GraderRequest):
+    _validate_public_task_request(request.task_id)
     env = SREIncidentEnv(tier=request.tier, task_id=request.task_id, seed=request.seed)
     observations = []
     rewards = []
@@ -163,6 +195,7 @@ def get_baseline(
     model: str | None = None,
     seed: int = 0,
 ):
+    _validate_public_task_request(task_id)
     try:
         return run_requested_baseline(
             tier=tier,
@@ -235,6 +268,56 @@ def get_benchmark_record(benchmark_id: str):
         return json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail="Benchmark record is unreadable") from exc
+
+
+@app.post("/runtime/baseline")
+def run_runtime_baseline(request: RuntimeBaselineRequest):
+    _validate_public_task_request(request.task_id)
+    try:
+        with _temporary_runtime_env(request.runtime):
+            return run_requested_baseline(
+                tier=request.tier,
+                task_id=request.task_id,
+                provider=request.runtime.provider,
+                model=request.runtime.model,
+                seed=request.seed,
+            ).model_dump(mode="json")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/runtime/benchmark")
+def run_runtime_benchmark(request: RuntimeBenchmarkRequest):
+    try:
+        with _temporary_runtime_env(request.runtime):
+            return run_benchmark(
+                provider=request.runtime.provider,
+                model=request.runtime.model,
+                seeds_per_scenario=request.seeds_per_scenario,
+            ).model_dump(mode="json")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/runtime/compare")
+def run_runtime_compare(request: RuntimeCompareRequest):
+    human = get_replay(request.session_id)
+    selected = None
+    with _temporary_runtime_env(request.runtime):
+        selected = _baseline_comparison_for(
+            tier=TaskTier(human["tier"]),
+            task_id=human["scenario_id"],
+            seed=human["seed"],
+            provider=request.runtime.provider,
+            model=request.runtime.model,
+        )
+    return {
+        "session_id": request.session_id,
+        "scenario_id": human["scenario_id"],
+        "seed": human["seed"],
+        "human": human,
+        "selected": selected,
+    }
 
 
 @app.get("/replay/{session_id}")
@@ -311,6 +394,63 @@ def _public_result_payload(result: dict) -> dict:
     if "scenario_id" in result:
         result["scenario_id"] = public_task_id_for(result["scenario_id"])
     return result
+
+
+def _provider_env_names(provider: str) -> tuple[str | None, str | None, str | None]:
+    normalized = provider.strip().lower()
+    if normalized == "scripted":
+        return None, None, None
+    if normalized == "openai":
+        return "OPENAI_API_KEY", "OPENAI_BASELINE_MODEL", None
+    if normalized == "gemini":
+        return "GEMINI_API_KEY", "GEMINI_BASELINE_MODEL", "GEMINI_BASE_URL"
+    if normalized == "openrouter":
+        return "OPENROUTER_API_KEY", "OPENROUTER_BASELINE_MODEL", "OPENROUTER_BASE_URL"
+    if normalized == "groq":
+        return "GROQ_API_KEY", "GROQ_BASELINE_MODEL", "GROQ_BASE_URL"
+    if normalized == "cerebras":
+        return "CEREBRAS_API_KEY", "CEREBRAS_BASELINE_MODEL", None
+    prefix = re.sub(r"[^A-Za-z0-9]+", "_", provider.strip().upper()).strip("_")
+    return f"{prefix}_API_KEY", f"{prefix}_BASELINE_MODEL", f"{prefix}_BASE_URL"
+
+
+@contextmanager
+def _temporary_runtime_env(runtime: RuntimeConfig):
+    provider = runtime.provider.strip().lower()
+    api_key_env, model_env, base_url_env = _provider_env_names(provider)
+    updates: dict[str, str | None] = {}
+    if api_key_env and runtime.api_key:
+        updates[api_key_env] = runtime.api_key
+    if model_env and runtime.model:
+        updates[model_env] = runtime.model
+    if base_url_env and runtime.base_url:
+        updates[base_url_env] = runtime.base_url
+
+    previous: dict[str, str | None] = {}
+    with RUNTIME_ENV_LOCK:
+        try:
+            for key, value in updates.items():
+                previous[key] = os.environ.get(key)
+                os.environ[key] = value
+            yield
+        finally:
+            for key in updates:
+                old_value = previous.get(key)
+                if old_value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old_value
+
+
+def _validate_public_task_request(task_id: str | None) -> None:
+    if task_id is None:
+        return
+    try:
+        scenario = get_scenario(task_id=task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown task_id") from exc
+    if not scenario.public:
+        raise HTTPException(status_code=404, detail="Unknown task_id")
 
 
 def _build_replay_payload(session_id: str, session: SessionEntry) -> dict:
