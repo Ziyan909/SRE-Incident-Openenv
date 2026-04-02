@@ -1,6 +1,6 @@
 ---
 title: SRE Incident Environment
-emoji: ":wrench:"
+emoji: "🔧"
 colorFrom: blue
 colorTo: indigo
 sdk: docker
