@@ -9,11 +9,15 @@ from env.baseline_runner import run_requested_baseline
 from env.environment import SREIncidentEnv
 from env.models import Action, TaskTier
 
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-oss-20b")
+HF_TOKEN = os.getenv("HF_TOKEN")
+API_KEY = os.getenv("API_KEY") or HF_TOKEN
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+
 
 def _default_provider() -> str:
-    if os.getenv("API_KEY") and os.getenv("MODEL_NAME"):
-        return "hackathon"
-    if os.getenv("HF_TOKEN") and os.getenv("MODEL_NAME"):
+    if API_KEY and MODEL_NAME:
         return "hackathon"
     if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_BASELINE_MODEL"):
         return "openai"
@@ -24,11 +28,11 @@ def _default_provider() -> str:
 
 def _configure_hackathon_provider(provider: str | None, model: str | None) -> tuple[str | None, str | None]:
     selected_provider = (provider or "").strip().lower() or None
-    selected_model = model
+    selected_model = model or MODEL_NAME
 
-    hackathon_api_key = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
-    hackathon_model = selected_model or os.getenv("MODEL_NAME")
-    hackathon_base_url = os.getenv("API_BASE_URL")
+    hackathon_api_key = API_KEY
+    hackathon_model = selected_model
+    hackathon_base_url = API_BASE_URL
 
     if selected_provider in {None, "hackathon"} and hackathon_api_key and hackathon_model:
         os.environ["HACKATHON_API_KEY"] = hackathon_api_key
