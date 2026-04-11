@@ -11,6 +11,8 @@ from env.models import Action, TaskTier
 
 
 def _default_provider() -> str:
+    if os.getenv("API_KEY") and os.getenv("MODEL_NAME"):
+        return "hackathon"
     if os.getenv("HF_TOKEN") and os.getenv("MODEL_NAME"):
         return "hackathon"
     if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_BASELINE_MODEL"):
@@ -24,7 +26,7 @@ def _configure_hackathon_provider(provider: str | None, model: str | None) -> tu
     selected_provider = (provider or "").strip().lower() or None
     selected_model = model
 
-    hackathon_api_key = os.getenv("HF_TOKEN")
+    hackathon_api_key = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
     hackathon_model = selected_model or os.getenv("MODEL_NAME")
     hackathon_base_url = os.getenv("API_BASE_URL")
 
