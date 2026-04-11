@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from env.incidents import list_tasks
+
 
 def _normalize_reward(reward: float | int | None) -> float:
     if reward is None:
@@ -18,36 +20,25 @@ def _extract_task_id(state: object = None, result: object = None, **_: object) -
     return None
 
 
-def grade_easy_01(state: dict | None = None, reward: float = 0.0, result: dict | None = None, **kwargs: object) -> float:
-    return _normalize_reward(reward if _extract_task_id(state=state, result=result, **kwargs) == "easy-01" else 0.0)
+def _make_task_grader(expected_task_id: str):
+    def _grader(
+        state: dict | None = None, reward: float = 0.0, result: dict | None = None, **kwargs: object
+    ) -> float:
+        return _normalize_reward(reward if _extract_task_id(state=state, result=result, **kwargs) == expected_task_id else 0.0)
+
+    _grader.__name__ = f"grade_{expected_task_id.replace('-', '_')}"
+    return _grader
 
 
-def grade_medium_01(
-    state: dict | None = None, reward: float = 0.0, result: dict | None = None, **kwargs: object
-) -> float:
-    return _normalize_reward(reward if _extract_task_id(state=state, result=result, **kwargs) == "medium-01" else 0.0)
+GRADERS = {}
+TASK_GRADER_PAIRS = []
 
+for _task in list_tasks():
+    if not _task.grader:
+        continue
+    _grader = _make_task_grader(_task.task_id)
+    globals()[_task.grader] = _grader
+    GRADERS[_task.task_id] = _grader
+    TASK_GRADER_PAIRS.append((_task.task_id, _grader))
 
-def grade_hard_01(state: dict | None = None, reward: float = 0.0, result: dict | None = None, **kwargs: object) -> float:
-    return _normalize_reward(reward if _extract_task_id(state=state, result=result, **kwargs) == "hard-01" else 0.0)
-
-
-GRADERS = {
-    "easy-01": grade_easy_01,
-    "medium-01": grade_medium_01,
-    "hard-01": grade_hard_01,
-}
-
-TASK_GRADER_PAIRS = [
-    ("easy-01", grade_easy_01),
-    ("medium-01", grade_medium_01),
-    ("hard-01", grade_hard_01),
-]
-
-__all__ = [
-    "grade_easy_01",
-    "grade_medium_01",
-    "grade_hard_01",
-    "GRADERS",
-    "TASK_GRADER_PAIRS",
-]
+__all__ = sorted([*globals().keys()])

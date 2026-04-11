@@ -665,6 +665,10 @@ def _public_task_description(scenario: IncidentScenario) -> str:
 def _public_service_focus(scenario: IncidentScenario) -> list[str]:
     return []
 
+
+def _public_grader_name(task_id: str) -> str:
+    return f"grade_{task_id.replace('-', '_')}"
+
 TASKS = [
     TaskDefinition(
         task_id=PUBLIC_TASK_ID_BY_SCENARIO_ID[scenario.scenario_id],
@@ -672,6 +676,7 @@ TASKS = [
         name=_public_task_name(scenario),
         description=_public_task_description(scenario),
         max_steps=scenario.max_steps,
+        grader=_public_grader_name(PUBLIC_TASK_ID_BY_SCENARIO_ID[scenario.scenario_id]) if scenario.public else None,
         template_id=public_template_id_for(scenario.template_id),
         supports_seed_variants=True,
         service_focus=_public_service_focus(scenario),

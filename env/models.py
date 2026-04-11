@@ -164,6 +164,7 @@ class TaskDefinition(BaseModel):
     name: str
     description: str
     max_steps: int
+    grader: str | None = None
     template_id: str | None = None
     supports_seed_variants: bool = False
     service_focus: List[str] = Field(default_factory=list)
