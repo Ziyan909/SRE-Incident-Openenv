@@ -7,8 +7,13 @@ from env.incidents import list_tasks
 
 def _normalize_reward(reward: float | int | None) -> float:
     if reward is None:
-        return 0.0
-    return min(max(float(reward), 0.0), 1.0)
+        return 0.5
+    value = float(reward)
+    if value <= 0.0:
+        return 0.1
+    if value >= 1.0:
+        return 0.9
+    return min(max(value, 0.1), 0.9)
 
 
 def _extract_task_id(state: object = None, result: object = None, **_: object) -> str | None:
